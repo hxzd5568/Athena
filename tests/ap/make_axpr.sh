@@ -6,8 +6,7 @@ TEST_FILENAME=${1:-"test_trivial_reduce"}
 TEST_TPL_FILENAME=`echo ${TEST_FILENAME/test_/}`
 
 echo "-- Write 'import ${TEST_FILENAME}' to __main__.py"
-echo "-- Write 'import test_matmul_binary' to __main__.py"
-echo "import ${TEST_FILENAME}" >> __main__.py
+echo "import ${TEST_FILENAME}" > __main__.py
 
 
 FILENAMES_ARRAY=(
@@ -24,8 +23,10 @@ FILENAMES_ARRAY=(
     "__main__"
     "topo_drr_pass"
     "op_convertion_drr_pass"
+    "umprime"
     "access_topo_drr"
     "abstract_drr"
+    "matmul_epilogue_remove_pass"
     "ap_tpl_codegen"
     "matmul_binary_tpl"
     "${TEST_FILENAME}"
