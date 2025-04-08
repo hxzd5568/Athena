@@ -32,6 +32,12 @@ class KernelArgIdNameRegistry:
     self.in_tensor_data_ptr_seq_no = self.in_tensor_data_ptr_seq_no + 1
     return name
 
+  def get_mm_out_tensor_data_ptr_var_name(self, out_ir_value_name="mm_out"):
+    ir_value = getattr(self.tensor_match_ctx, out_ir_value_name)
+    kernel_arg_id = self.code_gen_ctx.out_tensor_data_ptr_kernel_arg_id(ir_value)
+    create = self._get_creator(kernel_arg_id, self._create_mm_out_tensor_data_ptr_var_name)
+    return self.generated_kernel_arg_id2unique_name.get_or_create(kernel_arg_id, create)
+
   def get_out_tensor_data_ptr_var_name(self, out_ir_value_name):
     self.output_nums = self.output_nums + 1
     out_ir_value_name = f"{out_ir_value_name}{self.output_nums}"
@@ -43,6 +49,10 @@ class KernelArgIdNameRegistry:
   def _create_out_tensor_data_ptr_var_name(self):
     name = f"{self.name_prefix}out_ptr_{self.out_tensor_data_ptr_seq_no}"
     self.out_tensor_data_ptr_seq_no = self.out_tensor_data_ptr_seq_no + 1
+    return name
+
+  def _create_mm_out_tensor_data_ptr_var_name(self):
+    name = f"{self.name_prefix}mm_out_ptr"
     return name
 
   def get_dim_expr_var_name(self, dim_expr):

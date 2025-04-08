@@ -12,8 +12,31 @@ class ApOpLoadFromRegisterCodeGen:
     self.output_properties = output_properties
     self.kernel_arg_translator = kernel_arg_translator
     self.index_program_translator_map = index_program_translator_map
+    self.dtype2type_name = OrderedDict(
+        [
+            [PointerType.const_float_ptr, "const float*"],
+            [PointerType.const_float16_ptr, "const half*"],
+            [PointerType.float_ptr, "float*"],
+            [PointerType.float16_ptr, "half*"],
+            [DataType.float, "float"],
+            [DataType.float16, "half"],
+            [DataType.int64_t, "int64_t"],
+        ]
+    )
+    self.ptr2type = OrderedDict(
+        [
+            ["float*", "float"],
+            ["half*", "half"],
+        ]
+    )
 
   def __call__(self, inputs, mut_kernel_arg_id_registry, mut_lir_code_gen_ctx):
+    register_var_name_attr = self.op_property.attributes.register_var_name
+    print('111')
+    register_var_name = register_var_name_attr.match(a_str=lambda x:x)
+    print('register_var_name', register_var_name)
+    self.register_mm_out(mut_kernel_arg_id_registry, mut_lir_code_gen_ctx, "x") \
+        if register_var_name == "x" else None
     out = self.get_out_cg_val(0)
     return [out]
 
@@ -25,6 +48,25 @@ class ApOpLoadFromRegisterCodeGen:
       register_var_name
     )
 
+  def register_mm_out(self, mut_kernel_arg_id_registry, mut_lir_code_gen_ctx, data_op_name):
+    print('data_op_name of LoadFromRegister is: ', data_op_name)
+    mut_kernel_arg_id_registry.get_mm_out_tensor_data_ptr_var_name(data_op_name)
+    print('222')
+    generated_kernel_arg_id_and_names = (
+          mut_kernel_arg_id_registry.generated_kernel_arg_id2unique_name.items()
+    )
+    kernel_arg_id = filter(
+        lambda item: item[1] == "mm_out_ptr",
+        generated_kernel_arg_id_and_names
+    )[0] 
+    dtype = kernel_arg_id[0].type 
+    type_name = self.dtype2type_name[dtype] 
+    data_type = self.ptr2type[type_name] 
+    index = "(coord.batch * args.input0_dim1 * args.input1_dim1 + \
+        coord.row * args.input1_dim1 + coord.column)"
+    mut_lir_code_gen_ctx.stmts.append(
+        f"args.mm_out_ptr[{index}] = static_cast<{data_type}>(x);"
+    ) 
 
 class ApOpLoadFromGlobalCodeGen:
   def __init__(self,

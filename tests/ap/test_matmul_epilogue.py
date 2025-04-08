@@ -37,7 +37,8 @@ class MatmulEpilogueFusion(abstract_drr.DrrPass):
     o.fustion_op = o.ap_pattern_fusion_op(self.code_gen)
     o.fustion_op(
       map(lambda index: getattr(t, f"input{index}"),  range(in_num)),
-      map(lambda index: getattr(t, f"output{index}"),  range(out_num)),
+      map(lambda index: getattr(t, f"output{index}"),  range(out_num))
+      # [*map(lambda index: getattr(t, f"output{index}"),  range(out_num)), t.mm_out],
     )
 
   def constraint(self, o, t):
