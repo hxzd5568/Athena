@@ -20,7 +20,6 @@ export FLAGS_check_infer_symbolic=1
 export FLAGS_enable_pir_api=1
 export FLAGS_cinn_bucket_compile=True
 export FLAGS_prim_enable_dynamic=True
-export FLAGS_prim_all=True
 export FLAGS_pir_apply_shape_optimization_pass=1
 export FLAGS_group_schedule_tiling_first=1
 export FLAGS_cinn_new_group_scheduler=1
@@ -33,18 +32,21 @@ export GLOG_vmodule=ap_lower_fusion_op_pass=6
 # export GLOG_v=6
 
 # export PATH=/opt/nvidia/nsight-systems/2023.4.1/bin:$PATH
-# nsys profile --capture-range=cudaProfilerApi
-export FLAGS_enable_ap=0 && export FLAGS_ap_performance=0 && ${nsys_args} timeout 18 \
+
+export FLAGS_enable_ap=0 && export FLAGS_ap_performance=0 \
+    && export FLAGS_prim_all=False ${nsys_args} timeout 20 \
     python $FILENAME 2>&1 | tee "${LOG_DIR}/log_${FILE_NUM}.txt" 
 python parse_nsys_stats.py "${LOG_DIR}/${FILE_NUM}.sqlite" "pd" > "${LOG_DIR}/time_${FILE_NUM}_pd.txt" 
 sleep 2
 
-export FLAGS_enable_ap=0 && export FLAGS_ap_performance=1 && ${nsys_args} timeout 25 \
+export FLAGS_enable_ap=0 && export FLAGS_ap_performance=1 \
+    && export FLAGS_prim_all=True && ${nsys_args} timeout 28 \
     python $FILENAME 2>&1 | tee -a "${LOG_DIR}/log_${FILE_NUM}.txt" 
 python parse_nsys_stats.py "${LOG_DIR}/${FILE_NUM}.sqlite" "cinn" > "${LOG_DIR}/time_${FILE_NUM}_cinn.txt" 
 sleep 2
 
-export FLAGS_enable_ap=1 && export FLAGS_ap_performance=1 && ${nsys_args} timeout 35 \
+export FLAGS_enable_ap=1 && export FLAGS_ap_performance=1 \
+    && export FLAGS_prim_all=True && ${nsys_args} timeout 70 \
     python $FILENAME 2>&1 | tee -a "${LOG_DIR}/log_${FILE_NUM}.txt" | cut -c -80
 python parse_nsys_stats.py "${LOG_DIR}/${FILE_NUM}.sqlite" "ap" > "${LOG_DIR}/time_${FILE_NUM}_ap.txt" 
 sleep 2
