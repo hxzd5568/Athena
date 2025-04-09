@@ -32,7 +32,7 @@ class ApOpLoadFromRegisterCodeGen:
 
   def __call__(self, inputs, mut_kernel_arg_id_registry, mut_lir_code_gen_ctx):
     register_var_name_attr = self.op_property.attributes.register_var_name
-    print('111')
+    print('----1')
     register_var_name = register_var_name_attr.match(a_str=lambda x:x)
     print('register_var_name', register_var_name)
     self.register_mm_out(mut_kernel_arg_id_registry, mut_lir_code_gen_ctx, "x") \
@@ -48,10 +48,11 @@ class ApOpLoadFromRegisterCodeGen:
       register_var_name
     )
 
+  # TODO: only test code
   def register_mm_out(self, mut_kernel_arg_id_registry, mut_lir_code_gen_ctx, data_op_name):
     print('data_op_name of LoadFromRegister is: ', data_op_name)
     mut_kernel_arg_id_registry.get_mm_out_tensor_data_ptr_var_name(data_op_name)
-    print('222')
+    print('----2')
     generated_kernel_arg_id_and_names = (
           mut_kernel_arg_id_registry.generated_kernel_arg_id2unique_name.items()
     )
