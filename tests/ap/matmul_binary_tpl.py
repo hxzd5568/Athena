@@ -16,6 +16,11 @@ def is_in_tensor_karg(kernel_arg_id):
     )
     return kernel_arg_id_type_name == "InTensorDataPtrKernelArgId"
 
+def is_out_tensor_karg(kernel_arg_id):
+    kernel_arg_id_type_name = f"{type(kernel_arg_id)}".replace("<class '", "").replace(
+        "'>", ""
+    )
+    return kernel_arg_id_type_name == "OutTensorDataPtrKernelArgId"
 
 class MatmulBinaryTemplate:
     def __init__(
@@ -39,6 +44,7 @@ class MatmulBinaryTemplate:
         )
         self.input_dim_karg_to_shape_access = MutableOrderedDict()
         self.input_tensor_karg_to_shape_access = MutableOrderedDict()
+        self.output_tensor_karg_to_shape_access = MutableOrderedDict()
         self.kernel_name = "MatmulBinaryKernel"
         self.library_name = "matmul_binary_kernel"
 
@@ -164,6 +170,7 @@ class MatmulBinaryTemplate:
         def declare_epilogue_arguments_assign(pair):
             kernel_arg_id = pair[0]
             is_in_tensor_type = is_in_tensor_karg(kernel_arg_id)
+            is_out_tensor_type = is_out_tensor_karg(kernel_arg_id)
 
             var_name = pair[1]
             field_name = self.kernel_arg_translator.get_param_struct_field_name(
@@ -174,6 +181,10 @@ class MatmulBinaryTemplate:
                 param_name_for_var = self.input_tensor_karg_to_shape_access[var_name]
                 return f"reinterpret_cast<const {output_dtype} *>({params_name}.{param_name_for_var})"
 
+            def get_out_tensor_statement():
+                param_name_for_var = self.output_tensor_karg_to_shape_access[var_name]
+                return f"reinterpret_cast<{output_dtype} *>({params_name}.{param_name_for_var})"
+
             def get_dim_expr_statement():
                 param_name_for_var = self.input_dim_karg_to_shape_access[var_name]
                 return f"{params_name}.{param_name_for_var}"
@@ -181,23 +192,25 @@ class MatmulBinaryTemplate:
             statement = (
                 get_in_tensor_statement()
                 if is_in_tensor_type
-                else get_dim_expr_statement()
+                else get_out_tensor_statement()
+                     if is_out_tensor_type
+                     else get_dim_expr_statement()
             )
             return f"{obj_name}.{field_name} = {statement};"
 
         generated_kernel_arg_id_and_names = (
             self.mut_kernel_arg_id_registry.generated_kernel_arg_id2unique_name.items()
         )
+
         return f"\n{indent}".join(
             map(declare_epilogue_arguments_assign, generated_kernel_arg_id_and_names)
         )
 
-    def get_params_epilogue_ptrs_init_str(self, obj_name, indent):
+    def get_params_epilogue_ptrs_init_str(self, in_obj_name, out_obj_name, indent):
         in_tensor_id = 0
-
         def declare_params_epilogue_arguments_assign(pair):
             def get_creator():
-                return f"{obj_name}[{in_tensor_id}]"
+                return f"{in_obj_name}[{in_tensor_id}]"
 
             kernel_arg_id = pair[0]
             is_in_tensor_type = is_in_tensor_karg(kernel_arg_id)
@@ -206,7 +219,7 @@ class MatmulBinaryTemplate:
                 self.input_tensor_karg_to_shape_access.get_or_create(
                     pair[1], get_creator
                 )
-                statement = f"{obj_name}.push_back({pair[1]});"
+                statement = f"{in_obj_name}.push_back({pair[1]});"
                 in_tensor_id = in_tensor_id + 1
                 return statement
 
@@ -215,12 +228,38 @@ class MatmulBinaryTemplate:
         generated_kernel_arg_id_and_names = (
             self.mut_kernel_arg_id_registry.generated_kernel_arg_id2unique_name.items()
         )
-        return f"\n{indent}".join(
+        in_str = f"\n{indent}".join(
             map(
                 declare_params_epilogue_arguments_assign,
                 generated_kernel_arg_id_and_names,
             )
         )
+
+        out_tensor_id = 0
+        def declare_out_params_epilogue_arguments_assign(pair):
+            def get_creator():
+                return f"{out_obj_name}[{out_tensor_id}]"
+
+            kernel_arg_id = pair[0]
+            is_out_tensor_type = is_out_tensor_karg(kernel_arg_id)
+
+            def generate_statement():
+                self.output_tensor_karg_to_shape_access.get_or_create(
+                    pair[1], get_creator
+                )
+                statement = f"{out_obj_name}.push_back({pair[1]});"
+                out_tensor_id = out_tensor_id + 1
+                return statement
+
+            return generate_statement() if is_out_tensor_type else ""
+
+        out_str = f"\n{indent}".join(
+            map(
+                declare_out_params_epilogue_arguments_assign,
+                generated_kernel_arg_id_and_names,
+            )
+        )
+        return in_str + "\n" + out_str
 
     def get_params_input_shape_init_str(self, input_name, input_shape_kargs, indent):
         def init_input_shape_with_args(i):
@@ -308,9 +347,10 @@ void ${kernel_name}(void* stream_ptr, AP_KERNEL_ARGS_DECLARE) {
       *cuda_stream_ptr, ${input0}, ${input1}, nullptr, ${output}, ${input0}_shape, ${input1}_shape, std::vector<int64_t>{});
 
   std::vector<const void *> epilogue_in_ptrs;
+  std::vector<void *> epilogue_out_ptrs;
   AP_PARAMS_EPILOGUE_PTRS_INIT
 
-  params.SetEpilogues(epilogue_in_ptrs);
+  params.SetEpilogues(epilogue_in_ptrs, epilogue_out_ptrs);
 
 #if AP_ENABLE_AUTOTUNE
   AP_AUTOTUNE_${output_dtype}(ap::RunMatmulWithVariadicKernel);
@@ -343,7 +383,7 @@ void ${kernel_name}(void* stream_ptr, AP_KERNEL_ARGS_DECLARE) {
             )
             .replace(
                 "AP_PARAMS_EPILOGUE_PTRS_INIT",
-                self.get_params_epilogue_ptrs_init_str("epilogue_in_ptrs", indent="  "),
+                self.get_params_epilogue_ptrs_init_str("epilogue_in_ptrs", "epilogue_out_ptrs", indent="  "),
             )
             .replace(
                 "AP_EPILOGUE_ARGUMENTS_FIELDS",
@@ -363,8 +403,9 @@ void ${kernel_name}(void* stream_ptr, AP_KERNEL_ARGS_DECLARE) {
             .replace("${k_value}", f"{input0_shape_kargs[-1].value}")
             .replace("${n_value}", f"{input1_shape_kargs[-1].value}")
         )
-        source_dir = "/work/abstract_pass/Athena/tests/ap/matmul"
-        cutlass_dir = "/work/abstract_pass/Athena/tests/ap/matmul/cutlass"
+        print('code is: ', code)
+        source_dir = "/work/Paddle/Athena/tests/ap/matmul"
+        cutlass_dir = "/work/Paddle/Athena/tests/ap/matmul/cutlass"
         compile_cmd = (
             "nvcc -std=c++17 -O3 -Xcompiler=-fPIC -arch=sm_80 --expt-relaxed-constexpr"
         )
