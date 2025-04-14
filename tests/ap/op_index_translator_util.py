@@ -62,8 +62,13 @@ class PdOpSumCodeGen:
 
   def __call__(self, inputs, mut_kernel_arg_id_registry, mut_lir_code_gen_ctx):
     input_iter_var_names = inputs[0].iter_var_names
+    # TODO: Ap now only supports the b-m-n gemm; reduced_axes_num should equal to 2.
+    reduced_axes_num = min(2, max(2, len(inputs[1].const_data)))
+    reduced_axes = map(
+      lambda index: inputs[1].const_data[index], range(reduced_axes_num)
+    )
     reduced_axes_set = OrderedDict(
-      map(lambda x: [int(x), True], inputs[1].const_data)
+      map(lambda x: [int(x), True], reduced_axes)
     )
     non_reduced_axes = filter(
       lambda x: reduced_axes_set.contains(x) == False,
@@ -91,29 +96,38 @@ class CinnOpReshapeCodeGen:
     self.kernel_arg_translator = kernel_arg_translator
     self.anchor_iter_var_names = anchor_iter_var_names
 
-  def __call__(self, inputs, mut_kernel_arg_id_registry, mut_lir_code_gen_ctx):
-    symbolic_shape = self.input_properties[0].symbolic_shape
-    def get_or_create_dim_var_name(dim_expr):
-      arg_var_name = mut_kernel_arg_id_registry.get_dim_expr_var_name(dim_expr)
-      return self.kernel_arg_translator.get_use_name(arg_var_name)
-    def get_dim_var_name(i):
-      dim_expr = symbolic_shape[i]
-      return get_or_create_dim_var_name(dim_expr)
-    rank = len(symbolic_shape)
-    stride_dims_list = map(
-      lambda num_dims: map(lambda i: get_dim_var_name(num_dims + i + 1), range(rank - 1 - num_dims)),
-      range(rank)
-    )
+  def get_dim_var_name(self, i, symbolic_shape, dim_bias, mut_kernel_arg_id_registry):
+    dim_expr = symbolic_shape[i + dim_bias]
+    arg_var_name = mut_kernel_arg_id_registry.get_dim_expr_var_name(dim_expr)
+    use_var_name = self.kernel_arg_translator.get_use_name(arg_var_name)
+    return use_var_name
+
+  def calculate_stride_dims(self, symbolic_shape, rank, dim_bias, mut_kernel_arg_id_registry):
+    def get_stride(dim_num):
+        return map(
+          lambda i: self.get_dim_var_name(i + 1 + dim_num, symbolic_shape, 
+                                          dim_bias, mut_kernel_arg_id_registry), 
+          range(rank - 1 - dim_num)
+        )
+    stride_dims_list = map(get_stride, range(rank))
+    return stride_dims_list
+
+  def generate_offset_expr(inputs, stride_dims_list):
     var_name_and_dims_list = map(
       lambda pair: [pair[0], *pair[1]],
       zip(inputs[0].iter_var_names, stride_dims_list)
     )
-    offset_expr = " + ".join(
-      map(
-        lambda elts: " * ".join(elts),
-        var_name_and_dims_list
-      )
+    return " + ".join(
+      map(lambda elts: " * ".join(elts), var_name_and_dims_list)
     )
+  # TODO: Only applicable to matrix multiplication cases of b-m-n mode
+  def __call__(self, inputs, mut_kernel_arg_id_registry, mut_lir_code_gen_ctx):
+    symbolic_shape = self.input_properties[0].symbolic_shape
+    rank = min(len(symbolic_shape), 3)
+    dim_bias = max(len(symbolic_shape) - 3, 0)
+    stride_dims_list = self.calculate_stride_dims(symbolic_shape, rank, dim_bias,
+                                                  mut_kernel_arg_id_registry)
+    offset_expr = generate_offset_expr(inputs, stride_dims_list)
     assert len(self.output_properties[0].symbolic_shape) == 1, "len(self.output_properties[0]) should be 1"
     return [index_code_gen_value_util.IndexCodeGenValue([f"({offset_expr})"])]
 

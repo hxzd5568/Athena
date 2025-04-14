@@ -355,7 +355,7 @@ class DownSpiderUpSpiderAccessTopoPass(access_topo_drr.DrrPass):
 
 
 @access_topo_drr.register_drr_pass("left_down_spider_add", tag="default")
-class DownSpiderAddAccessTopoPass(access_topo_drr.DrrPass):
+class LeftDownSpiderAddAccessTopoPass(access_topo_drr.DrrPass):
 
   def source_pattern(self, o, t):
     o.spider = o.ap_native_op("ap_op.down_spider")
