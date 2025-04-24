@@ -4,7 +4,7 @@ import topo_drr_pass
 import umprime
 import matmul_epilogue_pass
 import op_convertion_drr_pass
-import matmul_binary_tpl
+import matmul_variadic_tpl
 import ir_tools
 import index_program_translator_util
 import op_compute_translator_util
@@ -37,7 +37,7 @@ class MatmulEpilogueFusion(abstract_drr.DrrPass):
     o.fustion_op = o.ap_pattern_fusion_op(self.code_gen)
     o.fustion_op(
       map(lambda index: getattr(t, f"input{index}"),  range(in_num)),
-      map(lambda index: getattr(t, f"output{index}"),  range(out_num))
+      [*map(lambda index: getattr(t, f"output{index}"),  range(out_num)), t.mm_out]
     )
 
   def constraint(self, o, t):
@@ -114,7 +114,7 @@ class MatmulEpilogueFusion(abstract_drr.DrrPass):
     init_pass_manager.run(program)
 
   def _make_kernel_arg_translator(self):
-    return matmul_binary_tpl.make_kernel_arg_translator()
+    return matmul_variadic_tpl.make_kernel_arg_translator()
 
   def _apply_topo_access_passes(self, mut_program, anchor_data_op_name):
     init_pass_manager = ir_tools.create_pass_manager()
@@ -249,10 +249,12 @@ class MatmulEpilogueFusion(abstract_drr.DrrPass):
       output_names=other_outputs_name_list,
     )
     print("index_func_unique_id2index_program:\n", index_func_unique_id2index_program)
+    mm_out_symbolic_shape = t.mm_out.symbolic_shape_to_list()
     index_program_translator_map = index_program_translator_util.IndexProgramTranslatorMap(
       index_func_unique_id2index_program=index_func_unique_id2index_program,
       kernel_arg_translator=kernel_arg_translator,
-      anchor_iter_var_names=matmul_binary_tpl.get_anchor_iter_var_names()
+      anchor_iter_var_names=matmul_variadic_tpl.get_anchor_iter_var_names(mm_out_symbolic_shape),
+      anchor_iter_dim_splits=matmul_variadic_tpl.get_anchor_iter_dim_splits(mm_out_symbolic_shape),
     )
     self._replace_with_load_from_register(
       mut_program,
@@ -282,7 +284,7 @@ class MatmulEpilogueFusion(abstract_drr.DrrPass):
     )
     print('after registry')
 
-    template_module = matmul_binary_tpl.MatmulBinaryTemplate(
+    template_module = matmul_variadic_tpl.MatmulVariadicTemplate(
       program_translator=program_translator,
       mut_kernel_arg_id_registry=mut_kernel_arg_id_registry,
     )
@@ -526,7 +528,7 @@ def get_mixin_class(base_class, number_of_inputs, number_of_outputs):
 
 def register_class(base_class, max_num_inputs, max_num_outputs):
   def register_drr_class(num_inputs, num_outputs):
-    abstract_drr.register_drr_pass(f"matmul_binary_in{num_inputs}_out{num_outputs}_fusion", nice=0)(
+    abstract_drr.register_drr_pass(f"matmul_epilogue_in{num_inputs}_out{num_outputs}_with_mm_out_fusion", nice=0)(
       get_mixin_class(base_class, num_inputs, num_outputs)
     )
 

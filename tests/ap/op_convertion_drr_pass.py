@@ -119,6 +119,22 @@ class PdOpSinAccessTopoPass(access_topo_drr.DrrPass):
       [t.output]
     )
 
+@access_topo_drr.register_drr_pass("pd_op_floor", tag="default")
+class PdOpFloorAccessTopoPass(access_topo_drr.DrrPass):
+
+  def source_pattern(self, o, t):
+    o.floor_op = o.ap_native_op("pd_op.floor")
+    o.floor_op(
+      [t.input],
+      [t.output]
+    )
+
+  def result_pattern(self, o, t):
+    o.result_op = o.ap_native_op("pd_op.relu")
+    o.result_op(
+      [t.input],
+      [t.output]
+    )
 @access_topo_drr.register_drr_pass("cinn_op_yield_store", tag="default")
 class CinnOpYieldStoreAccessTopoPass(access_topo_drr.DrrPass):
 
@@ -245,5 +261,134 @@ class PdOpRightFullAddAccessTopoPass(access_topo_drr.DrrPass):
     o.result_op = o.ap_native_op("pd_op.relu")
     o.result_op(
       [t.input],
+      [t.output]
+    )
+
+@access_topo_drr.register_drr_pass("full_generate_shape_expand_left_add", tag="default")
+class FullGenerateShapeExpandLeftAddAccessTopoPass(access_topo_drr.DrrPass):
+
+  def source_pattern(self, o, t):
+    o.full = o.ap_native_op("pd_op.full")
+    o.full(
+      [],
+      [t.intermediate0]
+    )
+    o.generate_shape = o.ap_native_op("cinn_op.generate_shape")
+    o.generate_shape(
+      [t.input0],
+      [t.intermediate1]
+    )
+    o.expand = o.ap_native_op("pd_op.expand")
+    o.expand(
+      [t.intermediate0, t.intermediate1],
+      [t.expanded_input]
+    )
+    o.add = o.ap_native_op("pd_op.add")
+    o.add(
+      [t.expanded_input, t.input0],
+      [t.output]
+    )
+
+  def result_pattern(self, o, t):
+    o.relu = o.ap_native_op("pd_op.relu")
+    o.relu(
+      [t.input0],
+      [t.output]
+    )
+
+@access_topo_drr.register_drr_pass("full_generate_shape_expand_right_add", tag="default")
+class FullGenerateShapeExpandRightAddAccessTopoPass(access_topo_drr.DrrPass):
+
+  def source_pattern(self, o, t):
+    o.full = o.ap_native_op("pd_op.full")
+    o.full(
+      [],
+      [t.intermediate0]
+    )
+    o.generate_shape = o.ap_native_op("cinn_op.generate_shape")
+    o.generate_shape(
+      [t.input0],
+      [t.intermediate1]
+    )
+    o.expand = o.ap_native_op("pd_op.expand")
+    o.expand(
+      [t.intermediate0, t.intermediate1],
+      [t.expanded_input]
+    )
+    o.add = o.ap_native_op("pd_op.add")
+    o.add(
+      [t.input0, t.expanded_input],
+      [t.output]
+    )
+
+  def result_pattern(self, o, t):
+    o.relu = o.ap_native_op("pd_op.relu")
+    o.relu(
+      [t.input0],
+      [t.output]
+    )
+
+
+@access_topo_drr.register_drr_pass("full_generate_shape_expand_left_diff_add", tag="default")
+class FullGenerateShapeExpandLeftDiffAddAccessTopoPass(access_topo_drr.DrrPass):
+
+  def source_pattern(self, o, t):
+    o.full = o.ap_native_op("pd_op.full")
+    o.full(
+      [],
+      [t.intermediate0]
+    )
+    o.generate_shape = o.ap_native_op("cinn_op.generate_shape")
+    o.generate_shape(
+      [t.input0],
+      [t.intermediate1]
+    )
+    o.expand = o.ap_native_op("pd_op.expand")
+    o.expand(
+      [t.intermediate0, t.intermediate1],
+      [t.expanded_input]
+    )
+    o.add = o.ap_native_op("pd_op.add")
+    o.add(
+      [t.expanded_input, t.input1],
+      [t.output]
+    )
+
+  def result_pattern(self, o, t):
+    o.relu = o.ap_native_op("pd_op.relu")
+    o.relu(
+      [t.input1],
+      [t.output]
+    )
+
+@access_topo_drr.register_drr_pass("full_generate_shape_expand_right_diff_add", tag="default")
+class FullGenerateShapeExpandRightDiffAddAccessTopoPass(access_topo_drr.DrrPass):
+
+  def source_pattern(self, o, t):
+    o.full = o.ap_native_op("pd_op.full")
+    o.full(
+      [],
+      [t.intermediate0]
+    )
+    o.generate_shape = o.ap_native_op("cinn_op.generate_shape")
+    o.generate_shape(
+      [t.input0],
+      [t.intermediate1]
+    )
+    o.expand = o.ap_native_op("pd_op.expand")
+    o.expand(
+      [t.intermediate0, t.intermediate1],
+      [t.expanded_input]
+    )
+    o.add = o.ap_native_op("pd_op.add")
+    o.add(
+      [t.input1, t.expanded_input],
+      [t.output]
+    )
+
+  def result_pattern(self, o, t):
+    o.relu = o.ap_native_op("pd_op.relu")
+    o.relu(
+      [t.input1],
       [t.output]
     )

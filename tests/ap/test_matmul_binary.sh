@@ -20,6 +20,6 @@ export FLAGS_pir_apply_shape_optimization_pass=1
 export FLAGS_group_schedule_tiling_first=1
 export FLAGS_cinn_new_group_scheduler=1
 
-export GLOG_vmodule=ap_generic_drr_pass=6
+# export GLOG_vmodule=ap_generic_drr_pass=6
 
 python $(pwd)/paddle-tests/test_matmul_binary.py

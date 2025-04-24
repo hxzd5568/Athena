@@ -22,7 +22,7 @@ nsys_args="nsys profile --stats true -w true -t cuda,nvtx,osrt,cudnn,cublas \
     --force-overwrite true -o ${LOG_DIR}/${FILE_NUM}"
 # export FLAGS_cinn_enable_vectorize=true
 # export GLOG_v=6
-# export GLOG_vmodule=ap_generic_drr_pass=6
+export GLOG_vmodule=ap_generic_drr_pass=6
 
 FLAGS_enable_ap=0 FLAGS_ap_performance=0 FLAGS_prim_all=False ${nsys_args} timeout 20 python $FILENAME 2>&1 | tee "${LOG_DIR}/log_${FILE_NUM}.txt" 
 python parse_nsys_stats.py "${LOG_DIR}/${FILE_NUM}.sqlite" "pd" > "${LOG_DIR}/time_${FILE_NUM}_pd.txt" 
@@ -32,6 +32,6 @@ FLAGS_enable_ap=0 FLAGS_ap_performance=1 FLAGS_prim_all=True ${nsys_args} timeou
 python parse_nsys_stats.py "${LOG_DIR}/${FILE_NUM}.sqlite" "cinn" > "${LOG_DIR}/time_${FILE_NUM}_cinn.txt" 
 sleep 2
 
-FLAGS_enable_ap=1 FLAGS_ap_performance=1 FLAGS_prim_all=True ${nsys_args} timeout 210 python $FILENAME 2>&1 | tee  -a "${LOG_DIR}/log_${FILE_NUM}.txt"
+FLAGS_enable_ap=1 FLAGS_ap_performance=1 FLAGS_prim_all=True ${nsys_args} timeout 210 python $FILENAME 2>&1 | tee -a "${LOG_DIR}/log_${FILE_NUM}.txt"
 python parse_nsys_stats.py "${LOG_DIR}/${FILE_NUM}.sqlite" "ap" > "${LOG_DIR}/time_${FILE_NUM}_ap.txt" 
 sleep 2

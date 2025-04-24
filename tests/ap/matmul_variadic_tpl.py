@@ -312,8 +312,9 @@ void ${kernel_name}(void* stream_ptr, ${AP_KERNEL_ARGS_DECLARE}) {
             .replace("${n_value}", f"{input1_shape_kargs[-1].value}")
         )
 
-        source_dir = "/work/abstract_pass/Athena/tests/ap/matmul"
-        cutlass_dir = "/work/abstract_pass/Athena/tests/ap/matmul/cutlass"
+        print('code is: ', code)
+        source_dir = "/work/Paddle/Athena/tests/ap/matmul"
+        cutlass_dir = "/work/Paddle/Athena/tests/ap/matmul/cutlass"
         compile_cmd = (
             "nvcc -std=c++17 -O3 -Xcompiler=-fPIC -arch=sm_80 --expt-relaxed-constexpr"
         )
