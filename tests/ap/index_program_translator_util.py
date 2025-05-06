@@ -1,6 +1,7 @@
 import index_drr_pass_util
 import ir_tools
 import op_index_translator_util
+import op_index_template_util
 
 class IndexProgramTranslatorMap:
 
@@ -21,6 +22,7 @@ class IndexProgramTranslatorMap:
         range(len(items))
       )
     )
+    self.split_index_codegen = op_index_template_util.split_index_codegen
 
   def get_offset_var_name(
     self,
@@ -34,6 +36,40 @@ class IndexProgramTranslatorMap:
       mut_lir_code_gen_ctx=mut_lir_code_gen_ctx
     )
     return ret.iter_var_names[0]
+
+  def get_ptr_index_by_ir_output(
+    self,
+    index_func_unique_id,
+    axis,
+    sections,
+    mut_kernel_arg_id_registry,
+    mut_lir_code_gen_ctx
+  ):
+    return self.split_index_codegen.get_split_index(axis=axis, sections=sections)
+
+  def get_ptr_index_by_ir_output(
+    self,
+    index_func_unique_id,
+    axis,
+    num,
+    shape,
+    mut_kernel_arg_id_registry,
+    mut_lir_code_gen_ctx
+  ):
+    return self.split_index_codegen.get_split_index(axis=axis, num=num, shape=shape)
+
+  def get_index_var_names_by_ir_output(
+    self,
+    index_func_unique_id,
+    axis,
+    num,
+    sections,
+    shape,
+    mut_kernel_arg_id_registry,
+    mut_lir_code_gen_ctx
+  ):
+    return self.split_index_codegen.get_split_index(axis=axis, num=num, shape) if num != 0 else
+           self.split_index_codegen.get_split_index(axis=axis, sections)
 
   def make_translator(self, program_id, index_program):
     pass_manager = ir_tools.create_pass_manager()
@@ -84,6 +120,10 @@ class IndexProgramTranslator:
     return self.ir_value_index2translated_value[-1]
 
   def _translate_op(self, op_property, mut_kernel_arg_id_registry, mut_lir_code_gen_ctx):
+    input_properties=map(self._get_value_property, op_property.input_value_indexes)
+    output_properties=map(self._get_value_property, op_property.output_value_indexes)
+    print('inputs properties: ', input_properties)
+    print('outputs properties: ', output_properties)
     index_op_translator = self.index_op_translator_maker(
       index_program_id=self.program_id,
       op_property=op_property,

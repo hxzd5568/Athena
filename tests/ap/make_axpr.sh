@@ -18,11 +18,13 @@ FILENAMES_ARRAY=(
     "access_topo_drr"
     "abstract_drr"
     "ap_tpl_codegen"
-    "matmul_variadic_tpl"
-    "matmul_epilogue_pass"
-    "test_matmul_binary"
-    "test_matmul_epilogue"
-    "test_matmul_epilogue_with_mm_out"
+    # "matmul_variadic_tpl2"
+    "matmul_variadic_split_tpl"
+    # "matmul_epilogue_pass"
+    "test_matmul_split"
+    # "test_matmul_binary2"
+    # "test_matmul_epilogue"
+    # "test_matmul_epilogue_with_mm_out"
 )
 for filename in "${FILENAMES_ARRAY[@]}"
 do

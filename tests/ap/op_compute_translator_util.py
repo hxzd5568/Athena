@@ -400,6 +400,120 @@ class CinnOpScaleCodeGen:
       f"op{self.op_property.op_index}_out{i}"
     )
 
+class PdOpSplitCodeGen:
+  def __init__(self,
+               op_property,
+               input_properties,
+               output_properties,
+               kernel_arg_translator,
+               index_program_translator_map):
+    self.op_property = op_property
+    self.input_properties = input_properties
+    self.output_properties = output_properties
+    self.kernel_arg_translator = kernel_arg_translator
+    self.index_program_translator_map = index_program_translator_map
+
+  def __call__(self, inputs, mut_kernel_arg_id_registry, mut_lir_code_gen_ctx):
+    sections = self.op_property.attributes.sections.match(a_intarray=lambda x:x)
+    axis = self.op_property.attributes.axis.match(a_scalar=lambda x:x)
+    in_name = inputs[0].var_name
+    ptr_index = self.index_program_translator_map.get_ptr_index_by_ir_output(
+      output_id=output_id,
+      axis=axis,
+      sections=sections,
+      mut_kernel_arg_id_registry=mut_kernel_arg_id_registry,
+      mut_lir_code_gen_ctx=mut_lir_code_gen_ctx,
+    )
+    offset_var_name = self.index_program_translator_map.get_index_var_names_by_ir_output(
+      output_id=output_id,
+      axis=axis,
+      sections=sections,
+      mut_kernel_arg_id_registry=mut_kernel_arg_id_registry,
+      mut_lir_code_gen_ctx=mut_lir_code_gen_ctx,
+    )
+    # true_str = f"{scale} * {in_name} + {bias}"
+    # false_str = f"{scale} * ({in_name} + {bias})"
+    # out = self.get_out_cg_val(0)
+    # mut_lir_code_gen_ctx.let(out, true_str if bias_after_scale else false_str)
+    return [out]
+
+  def get_out_cg_val(self, i):
+    return code_gen_value_util.CodeGenValue(
+      self.output_properties[i].type,
+      f"op{self.op_property.op_index}_out{i}"
+    )
+
+class PdOpSplitWithNumCodeGen:
+  def __init__(self,
+               op_property,
+               input_properties,
+               output_properties,
+               kernel_arg_translator,
+               index_program_translator_map):
+    self.op_property = op_property
+    self.input_properties = input_properties
+    self.output_properties = output_properties
+    self.kernel_arg_translator = kernel_arg_translator
+    self.index_program_translator_map = index_program_translator_map
+
+  def __call__(self, inputs, mut_kernel_arg_id_registry, mut_lir_code_gen_ctx):
+    num = self.op_property.attributes.num.match(a_i32=lambda x:x)
+    axis = self.op_property.attributes.axis.match(a_scalar=lambda x:x)
+    in_name = inputs[0].var_name
+    # !!! get shape maybe get_shape
+    ptr_index = self.index_program_translator_map.get_ptr_index_by_ir_output(
+      output_id=output_id,
+      axis=axis,
+      num=num,
+      shape=shape,
+      mut_kernel_arg_id_registry=mut_kernel_arg_id_registry,
+      mut_lir_code_gen_ctx=mut_lir_code_gen_ctx,
+    )
+    offset_var_name = self.index_program_translator_map.get_index_var_names_by_ir_output(
+      output_id=output_id,
+      axis=axis,
+      num=num,
+      sections=sections,
+      mut_kernel_arg_id_registry=mut_kernel_arg_id_registry,
+      mut_lir_code_gen_ctx=mut_lir_code_gen_ctx,
+    )
+    return [out]
+
+  def get_out_cg_val(self, i):
+    return code_gen_value_util.CodeGenValue(
+      self.output_properties[i].type,
+      f"op{self.op_property.op_index}_out{i}"
+    )
+
+class PdOpSliceCodeGen:
+  def __init__(self,
+               op_property,
+               input_properties,
+               output_properties,
+               kernel_arg_translator,
+               index_program_translator_map):
+    self.op_property = op_property
+    self.input_properties = input_properties
+    self.output_properties = output_properties
+    self.kernel_arg_translator = kernel_arg_translator
+    self.index_program_translator_map = index_program_translator_map
+
+  def __call__(self, inputs, mut_kernel_arg_id_registry, mut_lir_code_gen_ctx):
+    axes = self.op_property.attributes.axes.match(a_array=lambda x:x)
+    starts = self.op_property.attributes.bias.match(a_array=lambda x:x)
+    ends = self.op_property.attributes.ends.match(a_array=lambda x:x)
+    in_name = inputs[0].var_name
+    # true_str = f"{scale} * {in_name} + {bias}"
+    # false_str = f"{scale} * ({in_name} + {bias})"
+    # out = self.get_out_cg_val(0)
+    # mut_lir_code_gen_ctx.let(out, true_str if bias_after_scale else false_str)
+    return [out]
+
+  def get_out_cg_val(self, i):
+    return code_gen_value_util.CodeGenValue(
+      self.output_properties[i].type,
+      f"op{self.op_property.op_index}_out{i}"
+    )
 
 class PdOpSubstractCodeGen:
   def __init__(self,
@@ -634,7 +748,10 @@ class OpComputeTranslatorFactory:
       ["cinn_op.yield_store",       CinnOpYieldStoreCodeGen],
       ["cinn_op.broadcast",         CinnOpBroadcastCodeGen],
       ["pd_op.expand",              CinnOpExpandCodeGen],
-      ["cinn_op.generate_shape",    CinnOpGenerateShapeCodeGen]
+      ["cinn_op.generate_shape",    CinnOpGenerateShapeCodeGen],
+      ["pd_op.split",               PdOpSplitCodeGen],
+      ["pd_op.split_with_num",      PdOpSplitWithNumCodeGen],
+      ["pd_op.slice",               PdOpSliceCodeGen],
     ])
 
   def __call__(self,

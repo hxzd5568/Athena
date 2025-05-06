@@ -25,13 +25,13 @@ def get_anchor_iter_dim_splits(symbolic_shape):
     return map(lambda i: get_dim_split(i), range(num_anchor_iters))
 
 
-class MatmulVariadicTemplate:
+class MatmulVariadicSplitTemplate:
     def __init__(
         self,
-        program_translator,
+        # program_translator,
         mut_kernel_arg_id_registry,
     ):
-        self.program_translator = program_translator
+        # self.program_translator = program_translator
         self.mut_kernel_arg_id_registry = mut_kernel_arg_id_registry
         self.kernel_arg_translator = make_kernel_arg_translator()
         self.dtype2type_name = OrderedDict(
@@ -46,8 +46,8 @@ class MatmulVariadicTemplate:
             ]
         )
         self.input_dim_karg_to_shape_access = MutableOrderedDict()
-        self.kernel_name = "MatmulVariadicKernel"
-        self.library_name = "matmul_variadic_kernel"
+        self.kernel_name = "MatmulVariadicSplitKernel"
+        self.library_name = "matmul_variadic_split_kernel"
 
     def _register_name(self, pair):
         registry = self.mut_kernel_arg_id_registry
@@ -60,6 +60,8 @@ class MatmulVariadicTemplate:
         input0_karg,
         input1_karg,
         output_karg,
+        output1_karg,
+        output2_karg,
         input0_shape_kargs,
         input1_shape_kargs,
     ):
@@ -67,6 +69,8 @@ class MatmulVariadicTemplate:
             [input0_karg, "input0"],
             [input1_karg, "input1"],
             [output_karg, "output"],
+            [output1_karg, "output1"],
+            [output2_karg, "output2"],
             *map(
                 lambda i: [input0_shape_kargs[i], f"input0_dim{i}"],
                 range(len(input0_shape_kargs)),
@@ -79,17 +83,17 @@ class MatmulVariadicTemplate:
         print(f"-- kargs_name_pair_list: {kargs_name_pair_list}")
         map(self._register_name, kargs_name_pair_list)
 
-        mut_lir_code_gen_ctx = low_level_ir_code_gen_ctx_util.CudaLikeIrCodeGenCtx(
-            compute_dtype=DataType.float
-        )
-        self.program_translator.translate(
-            mut_kernel_arg_id_registry=self.mut_kernel_arg_id_registry,
-            mut_lir_code_gen_ctx=mut_lir_code_gen_ctx,
-        )
-        trivial_code_str = mut_lir_code_gen_ctx.get_stmts_joined_str(indent="    ")
-        print("-- matmul_binary_epilogue_code:\n", trivial_code_str)
+        # mut_lir_code_gen_ctx = low_level_ir_code_gen_ctx_util.CudaLikeIrCodeGenCtx(
+        #     compute_dtype=DataType.float
+        # )
+        # self.program_translator.translate(
+        #     mut_kernel_arg_id_registry=self.mut_kernel_arg_id_registry,
+        #     mut_lir_code_gen_ctx=mut_lir_code_gen_ctx,
+        # )
+        # trivial_code_str = mut_lir_code_gen_ctx.get_stmts_joined_str(indent="    ")
+        # print("-- matmul_binary_epilogue_code:\n", trivial_code_str)
         project_module = self.make_project(
-            trivial_code_str,
+            # trivial_code_str,
             input0_karg,
             input1_karg,
             output_karg,
@@ -116,6 +120,8 @@ class MatmulVariadicTemplate:
         all_kernel_arg_id_and_unique_names = (
             self.mut_kernel_arg_id_registry.all_kernel_arg_id2unique_name.items()
         )
+        print('decl len: ', len(all_kernel_arg_id_and_unique_names))
+        print('decl: ', map(lambda pair: pair[0].type, all_kernel_arg_id_and_unique_names))
         return map(lambda pair: pair[0].type, all_kernel_arg_id_and_unique_names)
 
     def get_kernel_arg_id_var_name(self, kernel_arg_id):
@@ -196,7 +202,7 @@ class MatmulVariadicTemplate:
 
     def make_project(
         self,
-        trivial_code_str,
+        # trivial_code_str,
         input0_karg,
         input1_karg,
         output_karg,
@@ -204,7 +210,6 @@ class MatmulVariadicTemplate:
         input1_shape_kargs,
     ):
         code_template = """
-// auto generated codes
 #include <cuda.h>
 #include <cuda_fp16.h>
 #include <vector>
@@ -215,33 +220,52 @@ class MatmulVariadicTemplate:
 namespace ap {
 
 template <typename T>
-struct VariadicEpilogueFunctor {
+struct SplitEpilogueFunctor {
   struct Arguments {
-    ${AP_EPILOGUE_ARGUMENTS_FIELDS}
+    int64_t input0_dim0; // Batch size
+    int64_t input0_dim1; // Rows of matrix A
+    int64_t input1_dim1; // Columns of matrix B
+    // half* out_ptr_0;     // Output buffer for the first split part
+    // half* out_ptr_1;     // Output buffer for the first split part
+    half* split_out_ptrs[2];
   };
 
-  // Note: need to support vectorized operation
   __forceinline__ __host__ __device__
   T operator()(T x, const Arguments& args, const MatrixCoord& coord) const {
     T out;
-    ${AP_EPILOGUE_COMPUTATION_STATEMENTS}
+    int64_t linear_index = coord.batch * args.input0_dim1 * args.input1_dim1 +
+                           coord.row * args.input1_dim1 + coord.column;
+    float op1_out0 = static_cast<float>(0.000000);
+    float op2_out0 = static_cast<float>(((x >= op1_out0) ? (x) : (op1_out0)));
+    int64_t ptr_id =  coord.batch / (args.input0_dim0 / 2);
+    int64_t ptr_bias = ptr_id * args.input0_dim0 / 2 * args.input0_dim1 * args.input1_dim1;
+
+    args.split_out_ptrs[ptr_id][linear_index - ptr_bias] = static_cast<half>(x);
+    
+    out = op2_out0;
     return out;
   }
 };
 
 template <int TuningConfigId>
-static void RunMatmulWithVariadicKernel(const GemmEpilogueParams &params, ${AP_KERNEL_ARGS_DECLARE}) {
-  using ElementT = ${output_dtype};
+static void RunMatmulWithSplitKernel(const GemmEpilogueParams &params, const half* input0, const half* input1, half* output,
+                                     int64_t input0_dim0, int64_t input0_dim1, int64_t input0_dim2, int64_t input1_dim1,
+                                     half* out_ptr_0, half* out_ptr_1) {
+  using ElementT = half;
   using ElementComputeT = float;
 
-  typename VariadicEpilogueFunctor<ElementComputeT>::Arguments epilogue_args;
+  typename SplitEpilogueFunctor<ElementComputeT>::Arguments epilogue_args;
 
-  ${AP_EPILOGUE_ARGUMENTS_INIT}
+  epilogue_args.input0_dim0 = input0_dim0;
+  epilogue_args.input0_dim1 = input0_dim1;
+  epilogue_args.input1_dim1 = input1_dim1;
+  epilogue_args.split_out_ptrs[0] = out_ptr_0;
+  epilogue_args.split_out_ptrs[1] = out_ptr_1;
 
-  constexpr int AlignA = AP_ALIGNMENT_${output_dtype}(${k_value});
-  constexpr int AlignB = AP_ALIGNMENT_${output_dtype}(${n_value});
+  constexpr int AlignA = AP_ALIGNMENT_half(128);
+  constexpr int AlignB = AP_ALIGNMENT_half(32);
 
-  CutlassMatmulAddVariadic<ElementT, ElementComputeT, VariadicEpilogueFunctor,
+  CutlassMatmulAddVariadic<ElementT, ElementComputeT, SplitEpilogueFunctor,
                            AlignA, AlignB, TuningConfigId>(params,
                                                            epilogue_args);
 }
@@ -250,68 +274,37 @@ static void RunMatmulWithVariadicKernel(const GemmEpilogueParams &params, ${AP_K
 
 extern "C" {
 
-void ${kernel_name}(void* stream_ptr, ${AP_KERNEL_ARGS_DECLARE}) {
-  std::vector<int64_t> ${input0}_shape;
-  ${AP_PARAMS_INPUT0_SHAPE_INIT}
+void MatmulVariadicSplitKernel(void* stream_ptr, const half* input0, const half* input1, half* output, half* out_ptr_0, half* out_ptr_1,
+                       int64_t input0_dim0, int64_t input0_dim1, int64_t input0_dim2, int64_t input1_dim1) {
+  std::vector<int64_t> input0_shape;
+  input0_shape.resize(3);
+  input0_shape[0] = input0_dim0;
+  input0_shape[1] = input0_dim1;
+  input0_shape[2] = input0_dim2;
 
-  std::vector<int64_t> ${input1}_shape;
-  ${AP_PARAMS_INPUT1_SHAPE_INIT}
+  std::vector<int64_t> input1_shape;
+  input1_shape.resize(2);
+  input1_shape[0] = input0_dim2;
+  input1_shape[1] = input1_dim1;
 
   cudaStream_t* cuda_stream_ptr = reinterpret_cast<cudaStream_t*>(stream_ptr);
   ap::GemmEpilogueParams params(
-      *cuda_stream_ptr, ${input0}, ${input1}, nullptr, ${output}, ${input0}_shape, ${input1}_shape, std::vector<int64_t>{});
+      *cuda_stream_ptr, input0, input1, nullptr, output, input0_shape, input1_shape, std::vector<int64_t>{});
+
 
 #if AP_ENABLE_AUTOTUNE
-  AP_AUTOTUNE_${output_dtype}(ap::RunMatmulWithVariadicKernel, *cuda_stream_ptr, params, ${AP_KERNEL_ARGS_CALL});
+  AP_AUTOTUNE_half(ap::RunMatmulWithSplitKernel, *cuda_stream_ptr, params, input0, input1, output,
+                   input0_dim0, input0_dim1, input0_dim2, input1_dim1, out_ptr_0, out_ptr_1);
 #else
-  ap::RunMatmulWithVariadicKernel<ap::DefaultConfig::kConfigId>(params, ${AP_KERNEL_ARGS_CALL});
+  ap::RunMatmulWithSplitKernel<ap::DefaultConfig::kConfigId>(params, input0, input1, output,
+                                                             input0_dim0, input0_dim1, input0_dim2, input1_dim1,
+                                                             out_ptr_0, out_ptr_1);
 #endif
 }
-}
+} 
   """
 
-        output_dtype = self.dtype2type_name[output_karg.type.data_type]
-        code = (
-            code_template.replace(
-                "${AP_EPILOGUE_COMPUTATION_STATEMENTS}", trivial_code_str
-            )
-            .replace(
-                "${AP_KERNEL_ARGS_DECLARE}",
-                self.get_kernel_arg_list_str(for_declare=True),
-            )
-            .replace(
-                "${AP_KERNEL_ARGS_CALL}",
-                self.get_kernel_arg_list_str(for_declare=False),
-            )
-            .replace(
-                "${AP_PARAMS_INPUT0_SHAPE_INIT}",
-                self.get_params_input_shape_init_str(
-                    "${input0}", input0_shape_kargs, indent="  "
-                ),
-            )
-            .replace(
-                "${AP_PARAMS_INPUT1_SHAPE_INIT}",
-                self.get_params_input_shape_init_str(
-                    "${input1}", input1_shape_kargs, indent="  "
-                ),
-            )
-            .replace(
-                "${AP_EPILOGUE_ARGUMENTS_FIELDS}",
-                self.get_epilogue_arguments_fields_str(indent="    "),
-            )
-            .replace(
-                "${AP_EPILOGUE_ARGUMENTS_INIT}",
-                self.get_epilogue_arguments_init_str("epilogue_args", indent="  "),
-            )
-            .replace("${kernel_name}", self.kernel_name)
-            .replace("${input0}", self.get_kernel_arg_id_var_name(input0_karg))
-            .replace("${input1}", self.get_kernel_arg_id_var_name(input1_karg))
-            .replace("${output}", self.get_kernel_arg_id_var_name(output_karg))
-            .replace("${output_dtype}", output_dtype)
-            .replace("${k_value}", f"{input0_shape_kargs[-1].value}")
-            .replace("${n_value}", f"{input1_shape_kargs[-1].value}")
-        )
-
+        code = code_template
         print('code is: ', code)
         source_dir = "/work/Athena/tests/ap/matmul"
         cutlass_dir = "/work/Athena/tests/ap/matmul/cutlass"
@@ -349,8 +342,9 @@ void ${kernel_name}(void* stream_ptr, ${AP_KERNEL_ARGS_DECLARE}) {
 
 
 def KernelDispatch(ctx):
-    so_func = ctx.get_so_function("MatmulVariadicKernel")
+    so_func = ctx.get_so_function("MatmulVariadicSplitKernel")
     stream_ptr = ctx.device_ctx.get_stream_addr_as_void_ptr()
     getters = ctx.kernel_dispatch_const_data.kernel_args_getters
     args = [stream_ptr, *map(lambda getter: getter(ctx), getters)]
+    margs = MutableList()
     apply(so_func, args)

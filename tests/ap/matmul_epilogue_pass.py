@@ -156,3 +156,36 @@ class RemoveOutputIndexPass(access_topo_drr.DrrPass):
 
   def result_pattern(self, o, t):
     pass
+
+class RemoveSliceOutputIndexPass(access_topo_drr.DrrPass):
+
+  def __init__(self, src_data_op_name, dst_store_to_global_op_name):
+    self.src_data_op_name = pir.a_str(src_data_op_name)
+    self.dst_store_to_global_op_name = pir.a_str(dst_store_to_global_op_name)
+
+  def source_pattern(self, o, t):
+    o.src_data_op = o.ap_native_op("pd_op.data")
+    o.src_data_op.name = self.src_data_op_name
+    o.src_data_op(
+      [],
+      [t.src_input]
+    )
+    o.down_spider_op = o.ap_native_op("ap_op.down_spider")
+    o.down_spider_op(
+      [t.src_input],
+      [t.dst_output_val]
+    )
+    o.slice_op = o.ap_native_op("cinn_op.slice")
+    o.slice_op(
+      [t.dst_output_val],
+      [t.slice_out]
+    )
+    o.dst_store_to_global_op = o.ap_native_op("ap_op.store_to_global")
+    o.dst_store_to_global_op.index_func_unique_id = self.dst_store_to_global_op_name
+    o.dst_store_to_global_op(
+      [t.dst_output, t.slice_out],
+      []
+    )
+
+  def result_pattern(self, o, t):
+    pass

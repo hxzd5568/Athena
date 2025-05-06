@@ -34,12 +34,12 @@ class PdOpTanhAccessTopoPass(access_topo_drr.DrrPass):
       [t.output]
     )
 
-@access_topo_drr.register_drr_pass("pd_op_erf", tag="default")
-class PdOpErfAccessTopoPass(access_topo_drr.DrrPass):
+@access_topo_drr.register_drr_pass("pd_op_split", tag="default")
+class PdOpSplitAccessTopoPass(access_topo_drr.DrrPass):
 
   def source_pattern(self, o, t):
-    o.erf_op = o.ap_native_op("pd_op.erf")
-    o.erf_op(
+    o.split_op = o.ap_native_op("pd_op.split")
+    o.split_op(
       [t.input],
       [t.output]
     )

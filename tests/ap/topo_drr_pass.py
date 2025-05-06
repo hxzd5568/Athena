@@ -248,6 +248,47 @@ class ConvertDownSpiderStoreDataOpToYieldOpPass(access_topo_drr.DrrPass):
       []
     )
 
+class ConvertDownSpiderSliceStoreDataOpToYieldOpPass(access_topo_drr.DrrPass):
+
+  def source_pattern(self, o, t):
+    o.data_mm_op = o.ap_native_op("pd_op.data")
+    o.data_mm_op(
+      [],
+      [t.input1]
+    )
+    o.down_spider_op = o.ap_native_op("ap_op.down_spider")
+    o.down_spider_op(
+      [t.input1],
+      [t.tmp1]
+    )
+    o.slice_op = o.ap_native_op("cinn_op.slice")
+    o.slice_op(
+      [t.tmp1],
+      [t.tmp2]
+    )
+    o.store_to_global = o.ap_native_op("ap_op.store_to_global")
+    o.store_to_global(
+      [t.input0, t.tmp2],
+      []
+    )
+
+  def result_pattern(self, o, t):
+    o.slice_op = o.ap_native_op("cinn_op.slice")
+    o.slice_op.axes =  lambda o, t: pir.a_array([pir.a_i64(DataValue.int64("0"))])
+    o.slice_op.starts =  lambda o, t: pir.a_array([pir.a_i64(DataValue.int64("0"))])
+    o.slice_op.ends =  lambda o, t: pir.a_array([pir.a_i64(DataValue.int64("32"))])
+    o.slice_op.infer_flags =  lambda o, t: pir.a_array([])
+    o.slice_op.decrease_axis =  lambda o, t: pir.a_array([])
+    o.slice_op(
+      [t.input1],
+      [t.input0]
+    )
+    o.yield_op = o.ap_native_op("cf.yield")
+    o.yield_op(
+      [t.input0],
+      []
+    )
+
 class InitDownSpiderAccessTopoPass(access_topo_drr.DrrPass):
 
   def __init__(self, data_input_name):

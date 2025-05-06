@@ -10,7 +10,7 @@ import time
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("test_dir", "/all_case_v2/", "")
+flags.DEFINE_string("test_dir", "/all_case_v3/", "")
 flags.DEFINE_string("log_root", "/work/Paddle/Athena/tests/ap/ap_matmul_graphs/", "")
 flags.DEFINE_string("dir_name", "/work/PaddleTest/", "")
 flags.DEFINE_string("shell_script", "/work/Paddle/Athena/tests/ap/test_single_matmul_file.sh", "")
