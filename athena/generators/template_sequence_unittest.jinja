@@ -446,7 +446,7 @@ class TestSubGraphLayer(CinnTestBase, unittest.TestCase):
         return [
         {%- for tensor_id in sig.tensor_ids %}
         {%- set example_tensor_meta = sig.example_input_meta4tensor_id(tensor_id) %}
-            # {{tensor_name_converter(sig.tensor_name4tensor_id(tensor_id))}}
+            # {{sig.tensor_name4tensor_id(tensor_id)}}
             {{get_input_tensor_instance(example_tensor_meta)}},
         {%- endfor %}
         ]

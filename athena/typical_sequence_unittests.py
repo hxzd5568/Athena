@@ -38,18 +38,23 @@ flags.DEFINE_string("output_dir", "./output-dir", "output directory.")
 
 
 def main(argv):
-    for file in glob.glob(f"{FLAGS.output_dir}/test_sequence_*.py"):
+    for file in glob.glob(f"{FLAGS.output_dir}/model.py"):
         os.remove(file)
     assert FLAGS.ir_programs != ""
     assert FLAGS.op_example_input_tensor_meta != ""
     original_programs_file = FLAGS.ir_programs
     op_example_inputs_file = FLAGS.op_example_input_tensor_meta
     unittests = GetOutputUnittests(original_programs_file, op_example_inputs_file)
+    # print(len(list(unittests)))
+    # exit(0)
     seg_counter = defaultdict(lambda: itertools.count())
     for name, unittest in unittests:
         unique_name = f"{name}_{next(seg_counter[name])}"
-        filepath = f"{FLAGS.output_dir}/test_sequence_{unique_name}.py"
-        WriteToFile(filepath, unittest)
+        filepath = f"{FLAGS.output_dir}/model.py"
+        inputs_meta, weighs_meta, model_arch = unittest.split('# --- seperate line ----\n')
+        WriteToFile(filepath, model_arch)
+        WriteToFile(f"{FLAGS.output_dir}/weight_meta.py", weighs_meta.rstrip('\n\n\n')+'\n')
+        WriteToFile(f"{FLAGS.output_dir}/input_meta.py", inputs_meta.strip('\n\n\n')+'\n')
         PrintToTerminal(unique_name, filepath, unittest)
 
 
@@ -74,14 +79,19 @@ def GetOutputUnittests(original_programs_file, op_example_inputs_file):
     op_example_inputs_meta_getter = MakeOpExampleInputsMetaGetter(
         GetClasses(op_example_inputs_file)
     )
+    # print(len(list(GetProgramClasses(original_programs_file))))
     ir_programs = [
         ir_program
-        for cls in GetProgramClasses(original_programs_file)
+        for cls in list(GetProgramClasses(original_programs_file))[-1:]
         for ir_program in [cls()]
         if not IsBackwardProgram(ir_program)
     ]
-
+    # print(len(ir_programs))
+    # print(ir_programs[0])
+    # exit(0)
     unittest_stmts_gen = PaddleBlockUnittestStmtsGenerator(BlockNameGenerator())
+    # print(program_seq_stmts_list)
+    # exit(0)
     program_seq_stmts_list = [
         (program_id, seq_stmts)
         for ir_program in ir_programs
@@ -95,20 +105,30 @@ def GetOutputUnittests(original_programs_file, op_example_inputs_file):
         if len(seq_stmts) > 1
         if op_example_inputs_meta_getter.HasAllInputs(program_id, seq_stmts[0].op)
     ]
-
+    # print(program_seq_stmts_list[0])
+    # exit(0)
     stmts_primitive_ids_list = [
         [MakeStmtPrimitiveId(stmt) for stmt in seq_stmts]
         for _, seq_stmts in program_seq_stmts_list
     ]
     rp_expr_parser = RpExprParser()
     lets_list_rp_expr, token_id2primitive_id = rp_expr_parser(stmts_primitive_ids_list)
-    print("\n".join(lets_list_rp_expr.DebugStrings(token_id2primitive_id)))
+    # print("\n".join(lets_list_rp_expr.DebugStrings(token_id2primitive_id)))
+    # exit(0)
     trees = MakeNestedIndexRangeFromLetsListTokenRpExpr(lets_list_rp_expr)
+    # print(len(trees))
+    # exit(0)
     assert len(trees) == len(program_seq_stmts_list)
     min_length, max_length = map(int, FLAGS.length_slice.split(":"))
     ranges_list = [
         tree.FilterSubTreeRangeBySize(min_length, max_length) for tree in trees
     ]
+    ranges_list = [[(0,-1)]]
+    # ranges_list = list(ranges_list[0])
+    # length = len(ranges_list)
+    # print('range_list:')
+    # [print(ranges_list[i]) for i in range(length)]
+    # exit(0)
     program_seq_stmts_list = (
         (program_id, seq_stmts)
         for ranges, pair in zip(ranges_list, program_seq_stmts_list)
@@ -116,7 +136,8 @@ def GetOutputUnittests(original_programs_file, op_example_inputs_file):
         for program_id, origin_seq_stmts in [pair]
         for seq_stmts in [origin_seq_stmts[start:end]]
     )
-
+    # print('program_seq_stmts_list len:', len(list(program_seq_stmts_list)))
+    # exit(0)
     def GetUnittests(program_id, seq_stmts):
         return GetSequenceUnittests(
             program_id, seq_stmts, op_example_inputs_meta_getter

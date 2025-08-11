@@ -337,6 +337,8 @@ class SequenceUnittestsGenerator:
 
     def MakeTensorName4TensorId(self, op_id2seq_stmt: OrderedDict[int, PyCodeStmt]):
         def GetSourceNames(op_id):
+            # print(op_id2seq_stmt[op_id].__dir__())
+            # exit(0)
             return op_id2seq_stmt[op_id].input_tensor_names
 
         def TensorName4TensorId(tensor_id):
@@ -490,7 +492,7 @@ class SequenceUnittestsGenerator:
         )
 
     def _RenderTemplate(self, seq_func_desc):
-        template = jinja_env.get_template("template_sequence_unittest.jinja")
+        template = jinja_env.get_template("model_arch.jinja")
         PADDLE_DEBUG_ENABLE_CINN = os.getenv("PADDLE_DEBUG_ENABLE_CINN") not in {
             "0",
             "False",
@@ -498,11 +500,13 @@ class SequenceUnittestsGenerator:
             "OFF",
         }
         counter = itertools.count()
+        input_counter = itertools.count()
         name2counter = defaultdict(lambda: next(counter))
+        in_name2counter = defaultdict(lambda: next(input_counter))
         return template.render(
             seq_func_desc=seq_func_desc,
             PADDLE_DEBUG_ENABLE_CINN=PADDLE_DEBUG_ENABLE_CINN,
-            tensor_name_converter=lambda x: f"t{name2counter[x]}",
+            tensor_name_converter=lambda x: f"input{in_name2counter[x]}" if 'data' in x else f't{name2counter[x]}',
         )
 
     def GetCppOperandTypeName(self, op, input_idx):
