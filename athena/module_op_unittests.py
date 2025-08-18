@@ -12,6 +12,7 @@ from athena.util.primitive_op_extractor import PrimitiveOpExtractor
 import athena.ir.ir_type as ir_type
 import itertools
 from collections import defaultdict
+import json
 
 FLAGS = flags.FLAGS
 
@@ -33,12 +34,21 @@ def main(argv):
     for i, (uid, unittest) in enumerate(GetOutputUnittests(
         original_programs_file, example_inputs_file
     )):
+        inputs_meta, weighs_meta, model_arch = unittest.split('# --- seperate line ----\n')
+        WriteToFile(f"{FLAGS.output_dir}/model.py", model_arch)
+        WriteToFile(f"{FLAGS.output_dir}/weight_meta.py", weighs_meta.rstrip('\n\n\n')+'\n')
+        WriteToFile(f"{FLAGS.output_dir}/input_meta.py", inputs_meta.strip('\n\n\n')+'\n')
         unique_name = f"{uid}_{next(seg_counter[uid])}"
-        filepath = f"{FLAGS.output_dir}/test_module_op_{unique_name}.py"
-        WriteToFile(filepath, unittest)
-        PrintToTerminal(unique_name, filepath, unittest)
-        # if i == 5:
-        #     break
+
+        PrintToTerminal(unique_name, f"{FLAGS.output_dir}/model.py", unittest)
+    metadata = {
+        "framework": "paddle",
+        "num_devices_required": 1,
+        "num_nodes_required": 1,
+    }
+    with open(os.path.join(FLAGS.output_dir, "graph_net.json"), "w") as f:
+        json.dump(metadata, f, indent=4)
+
 
 
 def GetSha256sum(content):
@@ -95,7 +105,6 @@ def GetOutputUnittests(original_programs_file, example_inputs_file):
     print('max ir op number:', max(ir_programs.values()) )
     ir_program = max(ir_programs.items(), key = lambda item:item[1])[0]
     ir_programs = [ir_program]
-
     # raise ValueError("The longest ir program is not forward program.")
     yield from (
         (GetSha256sum(",".join(op_names))[0:32], unittest)
