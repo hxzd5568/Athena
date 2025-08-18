@@ -30,13 +30,15 @@ def main(argv):
     for file in glob.glob(f"{FLAGS.output_dir}/test_module_op_*.py"):
         os.remove(file)
     seg_counter = defaultdict(lambda: itertools.count())
-    for uid, unittest in GetOutputUnittests(
+    for i, (uid, unittest) in enumerate(GetOutputUnittests(
         original_programs_file, example_inputs_file
-    ):
+    )):
         unique_name = f"{uid}_{next(seg_counter[uid])}"
         filepath = f"{FLAGS.output_dir}/test_module_op_{unique_name}.py"
         WriteToFile(filepath, unittest)
         PrintToTerminal(unique_name, filepath, unittest)
+        # if i == 5:
+        #     break
 
 
 def GetSha256sum(content):
@@ -73,11 +75,33 @@ def GetOutputUnittests(original_programs_file, example_inputs_file):
 
     def MakeUnittestGenerator(ir_program):
         return ModuleOpUnittestGenerator(ir_program, example_inputs_meta_getter)
+    # print(type(list(GetProgramClasses(original_programs_file))[0]))
+    # exit(0)
+    def CountNonBuiltinOps(ir_program):
+        non_bulitin_ops = 0
+        for name, op in vars(ir_program).items():
+            if not isinstance(op, ir_op.Op):
+                continue
+            if not op.name.startswith("builtin."):
+                non_bulitin_ops += 1
+        return non_bulitin_ops
+    ir_programs = {
+        ir_program:CountNonBuiltinOps(ir_program)
+        for cls in list(GetProgramClasses(original_programs_file))
+        for ir_program in [cls()]
+        if not IsBackwardProgram(ir_program)
+        if AllInputOutputTypesSupported(ir_program)
+    }
+    print('max ir op number:', max(ir_programs.values()) )
+    ir_program = max(ir_programs.items(), key = lambda item:item[1])[0]
+    ir_programs = [ir_program]
 
+    # raise ValueError("The longest ir program is not forward program.")
     yield from (
         (GetSha256sum(",".join(op_names))[0:32], unittest)
-        for cls in GetProgramClasses(original_programs_file)
-        for ir_program in [cls()]
+        # for cls in GetProgramClasses(original_programs_file)
+        # for cls in [list(GetProgramClasses(original_programs_file))[0]]
+        for ir_program in ir_programs
         if not IsBackwardProgram(ir_program)
         if AllInputOutputTypesSupported(ir_program)
         for generator in [MakeUnittestGenerator(ir_program)]

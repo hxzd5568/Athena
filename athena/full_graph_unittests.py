@@ -90,9 +90,10 @@ def GetOutputUnittests(original_programs_file, op_example_inputs_file):
     )
     ir_programs = [
         ir_program
-        for cls in list(GetProgramClasses(original_programs_file))[-1:]
+        for cls in list(GetProgramClasses(original_programs_file))
         for ir_program in [cls()]
         if not IsBackwardProgram(ir_program)
+        if AllInputOutputTypesSupported(ir_program)
     ]
     unittest_stmts_gen = PaddleBlockUnittestStmtsGenerator(BlockNameGenerator())
     program_seq_stmts_list = [
@@ -143,7 +144,19 @@ def GetOutputUnittests(original_programs_file, op_example_inputs_file):
         for _ in [generated_unittests.add(unittest)]
     )
 
-
+def AllInputOutputTypesSupported(ir_program):
+    supported_operand_types = (
+        ir_type.DenseTensorType,
+        ir_type.NullType,
+        ir_type.VectorType,
+    )
+    primitive_op_extractor = PrimitiveOpExtractor()
+    return all(
+        isinstance(in_out_type, supported_operand_types)
+        for op in primitive_op_extractor.Extract(ir_program)
+        for in_out_type in op.input_types + op.output_types
+    )
+    
 def MakeStmtPrimitiveId(stmt):
     counter = itertools.count()
     name2counter = defaultdict(lambda: next(counter))
